@@ -29,6 +29,8 @@ const int extension_const = 0;
 const int speed_const = 50;
 const int home_const = 45;
 const int cycles_const = 10;
+int actual_cycles = 0;
+
 //rom
 int flexion;
 int extension;
@@ -78,15 +80,15 @@ int sensorValue = 0; // Variable to store the value coming from the sensor
 int sensorHighest = 0;
 int sensorLowest = 4095;
 int sensoraux = 0;
-int flexion_calibrated = 0;
-int extension_calibrated = 4100;
-float sensorfloat = 0;
+int flexion_calibrated = 2220;
+int extension_calibrated = 3200;
 int sensoracum = 0;
 int contador_global = 0;
 int mil = 0, centena = 0, decena = 0, unidad = 0;
 char sensorV[5] = "1234";
 char fcalibrationstr[5] = "0000";
 char ecalibrationstr[5] = "0000";
+int actual_pos = 0;
 
 double datavalue = 0;
 double timevalue = 0;
@@ -100,7 +102,7 @@ void setup()   {
   glcd.st7565_set_brightness(0x10);
 
   glcd.display(); // show splashscreen
-  delay(2000);
+  delay(1000);
   glcd.clear();
   // draw a string at location (0,0)
   glcd.drawstring(0, 0, "HOLA MUNDO");
@@ -124,13 +126,15 @@ void setup()   {
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH);
 
+ ////////////////AQUI DEBE IGUALARSE A LOS VALORES EEPROM+
+
   flexion = flexion_const;
   extension = extension_const;
   number[3] = '\0';
   velocidad = speed_const;
   home_position = home_const;
   cycles = cycles_const;
-  
+///////////////////////////////////////////////////////// 
   flag_rotacion = false;
   flag_select = 10;
   select_sentido = true;
@@ -159,18 +163,18 @@ void setup()   {
 }
 
 void loop(){
-
+  
   taskManager.Loop();
 
   interface();
 
   pwm_value = (int)(65535*velocidad/100);
-
+/*
   if(millis() - timevalue > 100){
       timevalue = millis();
-      sensor_position();;
+      sensor_position();
   }
-  
+ */ 
 //*
   if(digitalRead(LS1) == true){
     flag_LS1 = true;
@@ -188,20 +192,7 @@ void loop(){
   {   
     if(flag_pause == false)
     {
-      if(flag_LS1 == true)
-      {
-        //digitalWrite(LED_BUILTIN, LOW);
-        flag_LS1 = true;
-        pwmWrite(pwm1, pwm_value);
-        pwmWrite(pwm2, 0);     
-      }
-      else if(flag_LS2 == true)
-      {
-        //digitalWrite(LED_BUILTIN, HIGH);
-        flag_LS2 = true;
-        pwmWrite(pwm1, 0);
-        pwmWrite(pwm2, pwm_value);
-      }
+      actuator_control();
     }
     else
     {
@@ -221,23 +212,69 @@ void loop(){
 
 void actuator_control()
 {
+  /*
+  while(sensoracum <= flexion){
+    pwmWrite(pwm1, 0);
+    pwmWrite(pwm2, pwm_value);     
+  }
 
+  while(sensoracum >= extension){
+    pwmWrite(pwm1, pwm_value);
+    pwmWrite(pwm2, 0);     
+  }
+  */
+  sensor_position();
+  //Serial.println(sensoracum);
+  actual_pos = (90*(extension_calibrated - sensoraux))/(extension_calibrated - flexion_calibrated);
+  Serial.println(actual_pos);
+  if(actual_pos == flexion){
+    digitalWrite(LED_BUILTIN, LOW);
+    pwmWrite(pwm1, pwm_value);
+    pwmWrite(pwm2, 0);
+  }
+  else if(actual_pos == extension){
+    digitalWrite(LED_BUILTIN, HIGH);
+    pwmWrite(pwm1, 0);
+    pwmWrite(pwm2, pwm_value);
+  }
+  /*
+      if(flag_LS1 == true)
+      {
+        pwmWrite(pwm1, pwm_value);
+        pwmWrite(pwm2, 0);     
+      }
+      else if(flag_LS2 == true)
+      {
+        pwmWrite(pwm1, 0);
+        pwmWrite(pwm2, pwm_value);
+      }
+      */
 }
 
 void sensor_position()
 {
+  sensoracum = 0;
+  //Read the value from the sensor:
+  for(double i = 0; i < 1000; i++){
     //Read the value from the sensor:
-    sensoraux = analogRead(sensorPin);
-    adctoangle();
-    sensorValue = sensoraux;
-    adc_value();
-    //Serial.print(sensorV);
-    //glcd.drawstring(90,3 , sensorV);
-    //glcd.display();
-    if(sensoraux > sensorHighest)
-      sensorHighest = sensoraux;
-    if(sensoraux < sensorLowest)
-      sensorLowest = sensoraux;
+    sensoraux = analogRead(sensorPin); 
+    sensoracum = sensoracum + sensoraux; 
+  }
+  sensoracum = sensoracum/1000;
+  sensoraux = sensoracum;
+  adctoangle();
+  /*
+  sensoraux = analogRead(sensorPin);
+  adctoangle();
+  sensorValue = sensoraux;
+  adc_value();
+  //Serial.print(sensorV);
+  
+  if(sensoracum > sensorHighest)
+    sensorHighest = sensoracum;
+  if(sensoracum < sensorLowest)
+    sensorLowest = sensoracum;
+   */
 }
 
 void interface(){
@@ -270,7 +307,6 @@ void interface(){
               home_position = home_const;
               cycles = cycles_const;
               nvic_sys_reset();
-              menu_inicio();
               break;
       case 1: flag_select = 10;
               flag_menu = 5;
@@ -389,13 +425,13 @@ void flexion_calibration(){
     flexion_calibrated = flexion_calibrated + sensoraux; 
   }
   flexion_calibrated = flexion_calibrated/100000;
+  Serial.println(flexion_calibrated);
   sensorValue = flexion_calibrated;  
   adc_value(); 
   fcalibrationstr[0] = sensorV[0];
   fcalibrationstr[1] = sensorV[1];
   fcalibrationstr[2] = sensorV[2];
   fcalibrationstr[3] = sensorV[3];
-  Serial.println(fcalibrationstr);
   
   while(digitalRead(LS2) == true){
     pwmWrite(pwm1, pwm_value);
@@ -409,14 +445,13 @@ void flexion_calibration(){
     extension_calibrated = extension_calibrated + sensoraux; 
   }
   extension_calibrated = extension_calibrated/100000;
+  Serial.println(extension_calibrated);
   sensorValue = extension_calibrated;
   adc_value();
   ecalibrationstr[0] = sensorV[0];
   ecalibrationstr[1] = sensorV[1];
   ecalibrationstr[2] = sensorV[2];
   ecalibrationstr[3] = sensorV[3];
-  Serial.println(ecalibrationstr);
-  //glcd.drawstring(90, 7, sensorV);
   digitalWrite(LED_BUILTIN,HIGH);
   menu_settings();
 }
